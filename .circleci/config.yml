@@ -1,0 +1,63 @@
+version: 2.1
+
+# =================================================================
+# STAGE 1 of 2 - THIS FILE ONLY DECIDES *WHAT CHANGED*.
+#
+# This is a CircleCI "setup workflow". Its only job is:
+#   1. Look at which files changed in this push (git diff vs main)
+#   2. For every environment folder that has a changed file, set a
+#      matching pipeline parameter (e.g. run-india-tms-dev) to true
+#   3. Hand off to continue_config.yml, which contains the REAL
+#      validate/plan/apply jobs for every environment.
+#
+# You will basically never need to edit this file. To change what
+# actually happens when an environment deploys, edit
+# .circleci/continue_config.yml instead.
+#
+# ONE-TIME SETUP REQUIRED (client / repo admin, do this once):
+#   CircleCI project -> Settings -> Advanced -> "Enable dynamic
+#   config using setup workflows" -> ON
+# Without that toggle, this file will not run and pushes will fail.
+# =================================================================
+
+setup: true
+
+orbs:
+  path-filtering: circleci/path-filtering@1.1.0
+
+workflows:
+  detect-changed-environments:
+    jobs:
+      - path-filtering/filter:
+          name: detect-changes
+          base-revision: main
+          config-path: .circleci/continue_config.yml
+          # Format: "<regex on changed file path>  <parameter to set>  <value>"
+          # If ANY file under an environment's folder changes, that
+          # environment's boolean parameter flips to "true". Changing
+          # files in TWO different environment folders in the same
+          # push sets BOTH parameters to true, and both pipelines run
+          # side by side later in continue_config.yml.
+          mapping: |
+            environments/india/host-dev/.*        run-india-host-dev        true
+            environments/india/host-staging/.*     run-india-host-staging    true
+            environments/india/host-prod/.*        run-india-host-prod       true
+            environments/india/tms-dev/.*          run-india-tms-dev         true
+            environments/india/tms-staging/.*      run-india-tms-staging     true
+            environments/india/tms-prod/.*         run-india-tms-prod        true
+            environments/india/vms-dev/.*          run-india-vms-dev         true
+            environments/india/vms-staging/.*      run-india-vms-staging     true
+            environments/india/vms-prod/.*         run-india-vms-prod        true
+            environments/india/analytics-dev/.*    run-india-analytics-dev   true
+            environments/india/analytics-prod/.*   run-india-analytics-prod  true
+            environments/us/host-dev/.*            run-us-host-dev           true
+            environments/us/host-staging/.*        run-us-host-staging       true
+            environments/us/host-prod/.*           run-us-host-prod          true
+            environments/us/tms-dev/.*             run-us-tms-dev            true
+            environments/us/tms-staging/.*         run-us-tms-staging        true
+            environments/us/tms-prod/.*             run-us-tms-prod           true
+            environments/us/vms-dev/.*              run-us-vms-dev            true
+            environments/us/vms-staging/.*          run-us-vms-staging        true
+            environments/us/vms-prod/.*             run-us-vms-prod           true
+            environments/us/analytics-dev/.*        run-us-analytics-dev      true
+            environments/us/analytics-prod/.*       run-us-analytics-prod     true
