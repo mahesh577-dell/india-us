@@ -2,7 +2,7 @@
 # ENVIRONMENT: india/host-dev   (host project: india-host-dev)
 #
 # Creates Shared VPC "india-dev-vpc" (asia-south1)
-# One of 6 shared VPCs (3 India + 3 US)
+# One of 6 shared VPCs (3 India + 3 US) ok 
 #
 # CIDR: 10.60.0.0/16
 # Service projects attached: india-tms-dev, india-vms-dev, india-analytics-dev
