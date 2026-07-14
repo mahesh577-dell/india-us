@@ -18,6 +18,15 @@ version: 2.1
 #   image - not from anything in this repo. This job is plain
 #   bash + jq + curl doing the exact same job instead.
 #
+# WHY continue_config.yml's PARAMETERS ARE NAMED "sel_region" etc,
+# NOT JUST "region":
+#   CircleCI locks in this file's own parameter names the moment you
+#   trigger the pipeline. If continue_config.yml tried to re-use the
+#   SAME names (region, environment, ...) in its continuation call,
+#   CircleCI rejects it with HTTP 409 "Conflicting pipeline
+#   parameters." Prefixing continue_config.yml's copies with "sel_"
+#   avoids that collision entirely.
+#
 # ONE-TIME SETUP REQUIRED (client / repo admin, do this once):
 #   CircleCI project -> Settings -> Advanced -> "Enable dynamic
 #   config using setup workflows" -> ON
@@ -49,17 +58,6 @@ parameters:
       - tms-prod
       - vms-prod
       - analytics-prod
-      - host-dev
-      - host-staging
-      - host-prod
-      - tms-dev
-      - vms-dev
-      - analytics-dev
-      - tms-staging
-      - vms-staging
-      - tms-prod
-      - vms-prod
-      - analytics-prod
     default: host-dev
   run_bootstrap:
     type: boolean
@@ -67,17 +65,6 @@ parameters:
   bootstrap_env:
     type: enum
     enum:
-      - host-dev
-      - host-staging
-      - host-prod
-      - tms-dev
-      - vms-dev
-      - analytics-dev
-      - tms-staging
-      - vms-staging
-      - tms-prod
-      - vms-prod
-      - analytics-prod
       - host-dev
       - host-staging
       - host-prod
@@ -160,14 +147,16 @@ jobs:
 
             # ---- 4. Pull in whatever was picked on the Trigger Pipeline
             #      form (these are substituted by CircleCI BEFORE this
-            #      shell script ever runs, so they're plain literals here) ----
+            #      shell script ever runs, so they're plain literals here).
+            #      Renamed to sel_* to avoid the parameter-name collision
+            #      explained at the top of this file. ----
             MANUAL_JSON=$(jq -n \
-              --argjson manual_trigger << pipeline.parameters.manual_trigger >> \
-              --arg region "<< pipeline.parameters.region >>" \
-              --arg environment "<< pipeline.parameters.environment >>" \
-              --argjson run_bootstrap << pipeline.parameters.run_bootstrap >> \
-              --arg bootstrap_env "<< pipeline.parameters.bootstrap_env >>" \
-              '{manual_trigger:$manual_trigger, region:$region, environment:$environment, run_bootstrap:$run_bootstrap, bootstrap_env:$bootstrap_env}')
+              --argjson sel_manual_trigger << pipeline.parameters.manual_trigger >> \
+              --arg sel_region "<< pipeline.parameters.region >>" \
+              --arg sel_environment "<< pipeline.parameters.environment >>" \
+              --argjson sel_run_bootstrap << pipeline.parameters.run_bootstrap >> \
+              --arg sel_bootstrap_env "<< pipeline.parameters.bootstrap_env >>" \
+              '{sel_manual_trigger:$sel_manual_trigger, sel_region:$sel_region, sel_environment:$sel_environment, sel_run_bootstrap:$sel_run_bootstrap, sel_bootstrap_env:$sel_bootstrap_env}')
 
             # ---- 5. Merge manual params + auto-detected booleans ----
             PARAMS_JSON=$(jq -n --argjson a "$MANUAL_JSON" --argjson b "$AUTO_JSON" '$a + $b')
@@ -199,14 +188,6 @@ jobs:
             if [ "$HTTP_CODE" = "200" ]; then
               echo "Continuation submitted - see the 'continue_config.yml' workflows below."
             elif [ "$HTTP_CODE" = "409" ]; then
-              # 409 on this endpoint means the continuation key for this
-              # pipeline was already used - almost always because this
-              # exact job step got silently retried by CircleCI's own
-              # infrastructure (not something in this script). If that
-              # happened, the FIRST attempt already succeeded and the
-              # real workflows are already running/done - check the
-              # Pipeline page for a sibling workflow. Treating this as
-              # a soft-pass instead of failing the whole job.
               echo "409 Conflict: this pipeline was likely already continued by an earlier retry of this same step."
               echo "Check the Pipeline page for a workflow that isn't 'detect-changed-environments' - it probably already ran."
             else

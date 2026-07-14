@@ -8,6 +8,11 @@ version: 2.1
 # hands off to this file. See the comment at the top of config.yml
 # for the full picture.
 #
+# NOTE ON PARAMETER NAMES: everything below is prefixed "sel_"
+# (sel_region, sel_environment, ...). That's deliberate - see the
+# note near the top of config.yml explaining why this file can't
+# reuse config.yml's parameter names directly.
+#
 # THREE WAYS THIS FILE GETS USED:
 #
 #  A) AUTOMATIC (on every push) - stage 1 detected that files under
@@ -41,27 +46,16 @@ version: 2.1
 
 parameters:
   # ---- Manual, single-environment trigger (see use case B above) ----
-  manual_trigger:
+  sel_manual_trigger:
     type: boolean
     default: false
-  region:
+  sel_region:
     type: enum
     enum: [india, us]
     default: india
-  environment:
+  sel_environment:
     type: enum
     enum:
-      - host-dev
-      - host-staging
-      - host-prod
-      - tms-dev
-      - vms-dev
-      - analytics-dev
-      - tms-staging
-      - vms-staging
-      - tms-prod
-      - vms-prod
-      - analytics-prod
       - host-dev
       - host-staging
       - host-prod
@@ -76,23 +70,12 @@ parameters:
     default: host-dev
 
   # ---- Manual bootstrap trigger (see use case C above) ----
-  run_bootstrap:
+  sel_run_bootstrap:
     type: boolean
     default: false
-  bootstrap_env:
+  sel_bootstrap_env:
     type: enum
     enum:
-      - host-dev
-      - host-staging
-      - host-prod
-      - tms-dev
-      - vms-dev
-      - analytics-dev
-      - tms-staging
-      - vms-staging
-      - tms-prod
-      - vms-prod
-      - analytics-prod
       - host-dev
       - host-staging
       - host-prod
@@ -272,35 +255,35 @@ jobs:
       - checkout
       - setup-gcp
       - run:
-          name: "Bootstrap plan - << pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>"
+          name: "Bootstrap plan - << pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>"
           command: |
             cd terraform/bootstrap
             mkdir -p states
             terraform init -input=false
             terraform plan \
-              -state="states/<< pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>.tfstate" \
-              -var-file="projects/<< pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>.tfvars" \
+              -state="states/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfstate" \
+              -var-file="projects/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfvars" \
               -input=false
       - run:
-          name: "Bootstrap apply - << pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>"
+          name: "Bootstrap apply - << pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>"
           command: |
             cd terraform/bootstrap
             terraform apply \
-              -state="states/<< pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>.tfstate" \
-              -var-file="projects/<< pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>.tfvars" \
+              -state="states/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfstate" \
+              -var-file="projects/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfvars" \
               -input=false -auto-approve
       - run:
           name: Show outputs (SA email + suggested context name)
           command: |
             cd terraform/bootstrap
-            terraform output -state="states/<< pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>.tfstate"
+            terraform output -state="states/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfstate"
             echo ""
             echo "NEXT STEP: create a JSON key for the SA shown above, then"
-            echo "add it as GOOGLE_CREDENTIALS in CircleCI context: gcp-<< pipeline.parameters.region >>-<< pipeline.parameters.bootstrap_env >>"
+            echo "add it as GOOGLE_CREDENTIALS in CircleCI context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>"
 
 workflows:
   bootstrap-one-project:
-    when: << pipeline.parameters.run_bootstrap >>
+    when: << pipeline.parameters.sel_run_bootstrap >>
     jobs:
       - hold-before-bootstrap:
           type: approval
@@ -311,17 +294,17 @@ workflows:
   manual-single-environment:
     when:
       and:
-        - << pipeline.parameters.manual_trigger >>
-        - not: << pipeline.parameters.run_bootstrap >>
+        - << pipeline.parameters.sel_manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
     jobs:
       - validate:
           name: manual-validate
-          env_path: "<< pipeline.parameters.region >>/<< pipeline.parameters.environment >>"
-          context: gcp-<< pipeline.parameters.region >>-<< pipeline.parameters.environment >>
+          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
       - plan:
           name: manual-plan
-          env_path: "<< pipeline.parameters.region >>/<< pipeline.parameters.environment >>"
-          context: gcp-<< pipeline.parameters.region >>-<< pipeline.parameters.environment >>
+          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
           requires: [manual-validate]
       - hold-manual-approval:
           type: approval
@@ -331,8 +314,8 @@ workflows:
               only: main
       - apply:
           name: manual-apply
-          env_path: "<< pipeline.parameters.region >>/<< pipeline.parameters.environment >>"
-          context: gcp-<< pipeline.parameters.region >>-<< pipeline.parameters.environment >>
+          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
           requires: [hold-manual-approval]
           filters:
             branches:
@@ -342,8 +325,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-host-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-host-dev-validate
@@ -373,8 +356,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-host-staging >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-host-staging-validate
@@ -404,8 +387,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-host-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-host-prod-validate
@@ -435,8 +418,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-tms-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-tms-dev-validate
@@ -466,8 +449,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-vms-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-vms-dev-validate
@@ -497,8 +480,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-analytics-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-analytics-dev-validate
@@ -528,8 +511,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-tms-staging >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-tms-staging-validate
@@ -559,8 +542,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-vms-staging >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-vms-staging-validate
@@ -590,8 +573,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-tms-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-tms-prod-validate
@@ -621,8 +604,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-vms-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-vms-prod-validate
@@ -652,8 +635,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-india-analytics-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: india-analytics-prod-validate
@@ -683,8 +666,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-host-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-host-dev-validate
@@ -714,8 +697,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-host-staging >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-host-staging-validate
@@ -745,8 +728,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-host-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-host-prod-validate
@@ -776,8 +759,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-tms-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-tms-dev-validate
@@ -807,8 +790,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-vms-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-vms-dev-validate
@@ -838,8 +821,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-analytics-dev >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-analytics-dev-validate
@@ -869,8 +852,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-tms-staging >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-tms-staging-validate
@@ -900,8 +883,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-vms-staging >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-vms-staging-validate
@@ -931,8 +914,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-tms-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-tms-prod-validate
@@ -962,8 +945,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-vms-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-vms-prod-validate
@@ -993,8 +976,8 @@ workflows:
     when:
       and:
         - << pipeline.parameters.run-us-analytics-prod >>
-        - not: << pipeline.parameters.run_bootstrap >>
-        - not: << pipeline.parameters.manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
     jobs:
       - validate:
           name: us-analytics-prod-validate
