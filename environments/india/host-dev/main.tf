@@ -99,3 +99,4 @@ module "shared_vpc" {
   service_project_ids = var.service_project_ids
 
   depends_on = [module.vpc, module.subnets]
+}
