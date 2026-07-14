@@ -1,18 +1,18 @@
 version: 2.1
 
 # =================================================================
-# STAGE 1 of 2 - THIS FILE ONLY DECIDES *WHAT CHANGED*.
+# STAGE 1 of 2 - detect which environment(s) changed, no 3rd-party
+# orb involved, then hand off to .circleci/continue_config.yml which
+# has the real jobs.
 #
-# This is a CircleCI "setup workflow". Its only job is:
-#   1. Look at which files changed in this push (git diff vs main)
-#   2. For every environment folder that has a changed file, set a
-#      matching pipeline parameter (e.g. run-india-tms-dev) to true
-#   3. Hand off to continue_config.yml, which contains the REAL
-#      validate/plan/apply jobs for every environment.
-#
-# You will basically never need to edit this file. To change what
-# actually happens when an environment deploys, edit
-# .circleci/continue_config.yml instead.
+# WHY NO path-filtering ORB:
+#   This repo previously used circleci/path-filtering. On 2026-07-14
+#   that orb started failing at its own "Set parameters" step with a
+#   Python 3.8/pip incompatibility coming from INSIDE the orb's own
+#   image - not from anything in this repo. Rather than depend on a
+#   third-party orb's internal Python version, this job is plain
+#   bash + jq + curl doing the exact same job: nothing here can break
+#   because of an orb's unrelated maintenance issue.
 #
 # ONE-TIME SETUP REQUIRED (client / repo admin, do this once):
 #   CircleCI project -> Settings -> Advanced -> "Enable dynamic
@@ -22,42 +22,95 @@ version: 2.1
 
 setup: true
 
-orbs:
-  path-filtering: circleci/path-filtering@1.1.0
+jobs:
+  detect-changes:
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - run:
+          name: Detect changed environments and continue the pipeline
+          command: |
+            set -euo pipefail
+
+            # jq ships in cimg/base, but install it if it's ever missing
+            command -v jq >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y jq)
+
+            # ---- 1. Get the list of changed files for this push ----
+            if [ "$CIRCLE_BRANCH" = "main" ]; then
+              CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)
+            else
+              git fetch origin main --depth=100 >/dev/null 2>&1 || true
+              CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null || true)
+            fi
+            echo "Changed files in this push:"
+            echo "$CHANGED"
+            echo ""
+
+            # ---- 2. Map each environment folder to its parameter name ----
+            declare -A ENV_MAP=(
+              ["environments/india/host-dev/"]="run-india-host-dev"
+              ["environments/india/host-staging/"]="run-india-host-staging"
+              ["environments/india/host-prod/"]="run-india-host-prod"
+              ["environments/india/tms-dev/"]="run-india-tms-dev"
+              ["environments/india/vms-dev/"]="run-india-vms-dev"
+              ["environments/india/analytics-dev/"]="run-india-analytics-dev"
+              ["environments/india/tms-staging/"]="run-india-tms-staging"
+              ["environments/india/vms-staging/"]="run-india-vms-staging"
+              ["environments/india/tms-prod/"]="run-india-tms-prod"
+              ["environments/india/vms-prod/"]="run-india-vms-prod"
+              ["environments/india/analytics-prod/"]="run-india-analytics-prod"
+              ["environments/us/host-dev/"]="run-us-host-dev"
+              ["environments/us/host-staging/"]="run-us-host-staging"
+              ["environments/us/host-prod/"]="run-us-host-prod"
+              ["environments/us/tms-dev/"]="run-us-tms-dev"
+              ["environments/us/vms-dev/"]="run-us-vms-dev"
+              ["environments/us/analytics-dev/"]="run-us-analytics-dev"
+              ["environments/us/tms-staging/"]="run-us-tms-staging"
+              ["environments/us/vms-staging/"]="run-us-vms-staging"
+              ["environments/us/tms-prod/"]="run-us-tms-prod"
+              ["environments/us/vms-prod/"]="run-us-vms-prod"
+              ["environments/us/analytics-prod/"]="run-us-analytics-prod"
+            )
+
+            # ---- 3. Build the parameters JSON: true for anything changed ----
+            PARAMS_JSON="{"
+            first=true
+            for path in "${!ENV_MAP[@]}"; do
+              key="${ENV_MAP[$path]}"
+              if echo "$CHANGED" | grep -q "^$path"; then
+                val=true
+                echo "  -> $key = true   (matched: $path)"
+              else
+                val=false
+              fi
+              if [ "$first" = true ]; then first=false; else PARAMS_JSON="$PARAMS_JSON,"; fi
+              PARAMS_JSON="$PARAMS_JSON\"$key\":$val"
+            done
+            PARAMS_JSON="$PARAMS_JSON}"
+
+            # ---- 4. Send continue_config.yml + parameters to CircleCI ----
+            # CIRCLE_CONTINUATION_KEY is provided automatically inside
+            # setup-workflow jobs - no separate API token needed.
+            # --rawfile safely embeds the yaml file as a JSON string,
+            # no manual escaping and no python needed.
+            jq -n \
+              --arg continuation "$CIRCLE_CONTINUATION_KEY" \
+              --rawfile config .circleci/continue_config.yml \
+              --argjson parameters "$PARAMS_JSON" \
+              '{"continuation-key": $continuation, "configuration": $config, "parameters": $parameters}' \
+              > /tmp/continue-body.json
+
+            curl --silent --show-error --fail \
+              --request POST \
+              --url https://circleci.com/api/v2/pipeline/continue \
+              --header "Content-Type: application/json" \
+              --data @/tmp/continue-body.json
+
+            echo ""
+            echo "Continuation submitted - see the 'continue_config.yml' workflows below."
 
 workflows:
   detect-changed-environments:
     jobs:
-      - path-filtering/filter:
-          name: detect-changes
-          base-revision: main
-          config-path: .circleci/continue_config.yml
-          # Format: "<regex on changed file path>  <parameter to set>  <value>"
-          # If ANY file under an environment's folder changes, that
-          # environment's boolean parameter flips to "true". Changing
-          # files in TWO different environment folders in the same
-          # push sets BOTH parameters to true, and both pipelines run
-          # side by side later in continue_config.yml.
-          mapping: |
-            environments/india/host-dev/.*        run-india-host-dev        true
-            environments/india/host-staging/.*     run-india-host-staging    true
-            environments/india/host-prod/.*        run-india-host-prod       true
-            environments/india/tms-dev/.*          run-india-tms-dev         true
-            environments/india/tms-staging/.*      run-india-tms-staging     true
-            environments/india/tms-prod/.*         run-india-tms-prod        true
-            environments/india/vms-dev/.*          run-india-vms-dev         true
-            environments/india/vms-staging/.*      run-india-vms-staging     true
-            environments/india/vms-prod/.*         run-india-vms-prod        true
-            environments/india/analytics-dev/.*    run-india-analytics-dev   true
-            environments/india/analytics-prod/.*   run-india-analytics-prod  true
-            environments/us/host-dev/.*            run-us-host-dev           true
-            environments/us/host-staging/.*        run-us-host-staging       true
-            environments/us/host-prod/.*           run-us-host-prod          true
-            environments/us/tms-dev/.*             run-us-tms-dev            true
-            environments/us/tms-staging/.*         run-us-tms-staging        true
-            environments/us/tms-prod/.*             run-us-tms-prod           true
-            environments/us/vms-dev/.*              run-us-vms-dev            true
-            environments/us/vms-staging/.*          run-us-vms-staging        true
-            environments/us/vms-prod/.*             run-us-vms-prod           true
-            environments/us/analytics-dev/.*        run-us-analytics-dev      true
-            environments/us/analytics-prod/.*       run-us-analytics-prod     true
+      - detect-changes
