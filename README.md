@@ -1,4 +1,4 @@
-# FreightFox / Titan — Terraform Infrastructure
+# FreightFox / Titan — Terraform Infrastructure 
 ### Shared VPC on GCP — India + US, 6 regions, path-based CircleCI pipeline
 
 This README is written for someone who has never seen this repo before.
