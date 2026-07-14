@@ -1,18 +1,22 @@
 version: 2.1
 
 # =================================================================
-# STAGE 1 of 2 - detect which environment(s) changed, no 3rd-party
-# orb involved, then hand off to .circleci/continue_config.yml which
-# has the real jobs.
+# STAGE 1 of 2 - has TWO jobs to do:
+#   1. Show a clean "Trigger Pipeline" form (region / environment /
+#      manual_trigger / run_bootstrap / bootstrap_env) - this file
+#      must declare these parameters for CircleCI's UI to auto-fill
+#      them as dropdowns/checkboxes.
+#   2. Detect which environment folder(s) changed via plain git diff
+#      (no 3rd-party orb - see note below), merge that with whatever
+#      you picked in the UI, and hand everything to
+#      .circleci/continue_config.yml, which has the real jobs.
 #
 # WHY NO path-filtering ORB:
 #   This repo previously used circleci/path-filtering. On 2026-07-14
 #   that orb started failing at its own "Set parameters" step with a
 #   Python 3.8/pip incompatibility coming from INSIDE the orb's own
-#   image - not from anything in this repo. Rather than depend on a
-#   third-party orb's internal Python version, this job is plain
-#   bash + jq + curl doing the exact same job: nothing here can break
-#   because of an orb's unrelated maintenance issue.
+#   image - not from anything in this repo. This job is plain
+#   bash + jq + curl doing the exact same job instead.
 #
 # ONE-TIME SETUP REQUIRED (client / repo admin, do this once):
 #   CircleCI project -> Settings -> Advanced -> "Enable dynamic
@@ -21,6 +25,71 @@ version: 2.1
 # =================================================================
 
 setup: true
+
+parameters:
+  # ---- Shown as dropdowns/checkboxes in "Trigger Pipeline" ----
+  manual_trigger:
+    type: boolean
+    default: false
+  region:
+    type: enum
+    enum: [india, us]
+    default: india
+  environment:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+  run_bootstrap:
+    type: boolean
+    default: false
+  bootstrap_env:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
 
 jobs:
   detect-changes:
@@ -73,8 +142,8 @@ jobs:
               ["environments/us/analytics-prod/"]="run-us-analytics-prod"
             )
 
-            # ---- 3. Build the parameters JSON: true for anything changed ----
-            PARAMS_JSON="{"
+            # ---- 3. Build the auto-detected booleans (one per env) ----
+            AUTO_JSON="{"
             first=true
             for path in "${!ENV_MAP[@]}"; do
               key="${ENV_MAP[$path]}"
@@ -84,16 +153,31 @@ jobs:
               else
                 val=false
               fi
-              if [ "$first" = true ]; then first=false; else PARAMS_JSON="$PARAMS_JSON,"; fi
-              PARAMS_JSON="$PARAMS_JSON\"$key\":$val"
+              if [ "$first" = true ]; then first=false; else AUTO_JSON="$AUTO_JSON,"; fi
+              AUTO_JSON="$AUTO_JSON\"$key\":$val"
             done
-            PARAMS_JSON="$PARAMS_JSON}"
+            AUTO_JSON="$AUTO_JSON}"
 
-            # ---- 4. Send continue_config.yml + parameters to CircleCI ----
+            # ---- 4. Pull in whatever was picked on the Trigger Pipeline
+            #      form (these are substituted by CircleCI BEFORE this
+            #      shell script ever runs, so they're plain literals here) ----
+            MANUAL_JSON=$(jq -n \
+              --argjson manual_trigger << pipeline.parameters.manual_trigger >> \
+              --arg region "<< pipeline.parameters.region >>" \
+              --arg environment "<< pipeline.parameters.environment >>" \
+              --argjson run_bootstrap << pipeline.parameters.run_bootstrap >> \
+              --arg bootstrap_env "<< pipeline.parameters.bootstrap_env >>" \
+              '{manual_trigger:$manual_trigger, region:$region, environment:$environment, run_bootstrap:$run_bootstrap, bootstrap_env:$bootstrap_env}')
+
+            # ---- 5. Merge manual params + auto-detected booleans ----
+            PARAMS_JSON=$(jq -n --argjson a "$MANUAL_JSON" --argjson b "$AUTO_JSON" '$a + $b')
+            echo ""
+            echo "Final parameters sent to continue_config.yml:"
+            echo "$PARAMS_JSON"
+
+            # ---- 6. Send continue_config.yml + parameters to CircleCI ----
             # CIRCLE_CONTINUATION_KEY is provided automatically inside
             # setup-workflow jobs - no separate API token needed.
-            # --rawfile safely embeds the yaml file as a JSON string,
-            # no manual escaping and no python needed.
             jq -n \
               --arg continuation "$CIRCLE_CONTINUATION_KEY" \
               --rawfile config .circleci/continue_config.yml \
