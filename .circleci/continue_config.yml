@@ -219,7 +219,7 @@ commands:
     steps:
       - run:
           name: Load GCP service account key
-          command: echo "$GOOGLE_CREDENTIALS" > /tmp/gcp-key.json
+          command: printf '%s' "$GOOGLE_CREDENTIALS" > /tmp/gcp-key.json
 
 jobs:
   # ---- Reusable jobs, called once per environment with different
