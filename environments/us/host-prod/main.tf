@@ -1,4 +1,4 @@
-# =================================================================  
+# =================================================================   
 # ENVIRONMENT: us/host-prod   (host project: us-host-prod)
 #
 # Creates Shared VPC "us-prod-vpc" (us-central1)
