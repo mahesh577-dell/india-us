@@ -45,6 +45,52 @@ version: 2.1
 # =================================================================
 
 parameters:
+  # ---- Passthrough from config.yml --------------------------------
+  # CircleCI automatically forwards the original trigger parameters
+  # to the continued pipeline. These are declared here ONLY to
+  # prevent "Unexpected argument" rejection - they are never used
+  # in any job or workflow below.
+  manual_trigger:
+    type: boolean
+    default: false
+  region:
+    type: enum
+    enum: [india, us]
+    default: india
+  environment:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+  run_bootstrap:
+    type: boolean
+    default: false
+  bootstrap_env:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+
   # ---- Manual, single-environment trigger (see use case B above) ----
   sel_manual_trigger:
     type: boolean
